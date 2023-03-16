@@ -1,0 +1,3 @@
+#+TITLE: Linux kernel utils and config files
+#+AUTHOR: Claudio Migliorelli (@mg)
+This is a directory containing files I collected during these years of kernel development.

@@ -9,10 +9,12 @@ fi
 
 qemu-system-x86_64 \
     -m 128M \
-    -nographic \
+    -cpu kvm64,+smep,+smap \
     -kernel $1 \
-    -append 'console=ttyS0 loglevel=3 oops=panic panic=1 kaslr' \
+    -initrd $2 \
+    -hdb flag.txt \
+    -snapshot \
+    -nographic \
     -monitor /dev/null \
-    -initrd $2  \
-    -cpu qemu64 \
-    -smp cores=2
+    -no-reboot \
+    -append "console=ttyS0 kaslr kpti=1 quiet panic=1"

@@ -1,3 +1,3 @@
-#+TITLE: Linux kernel utils and config files
+#+TITLE: My Linux kernel utils
 #+AUTHOR: Claudio Migliorelli (@mg)
-This is a directory containing files I collected during these years of kernel development.
+This is a directory containing files I collected during some years of kernel development/hacking. Most of them are convenient small utils I use when dealing with CTF challenges or kernel development tasks. These scripts heavily rely on the assumption that the kernel will run with QEMU with a minimal rootfs.

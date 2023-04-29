@@ -11,7 +11,7 @@ if [ ! -z "$2" ]; then
     gcc -o exploit -static $1
     mv ./exploit $2
     cd $2
-    find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs-busybox-x86.cpio.gz
+    find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz
 else
     gcc -o exploit -static $1
     mv ./exploit $HOME/staging/initramfs/fs/

@@ -7,5 +7,7 @@ tar -xvf linux-*.tar.xz
 rm linux-*.tar.xz
 mv linux-* linux/
 
+cd $HOME/sources/linux
+
 make x86_64_defconfig
 make -j4 bzImage

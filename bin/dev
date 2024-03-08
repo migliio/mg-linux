@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+import argparse
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="dev",
+        description="`dev` is a kernel helper that I use to automate some development-related tasks in my day-to-day work with the Linux kernel.")
+
+    subparsers = parser.add_subparsers(
+        title="command", description="command to run", dest="command")
+
+    parser_todos = subparsers.add_parser(
+        "todos-list",
+        help="List TODO files in the Linux kernel to find one issue to work on",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser_todos.add_argument("-f", "--filter", help="A filtering option on the last activity (i.e., commit) performed on TODOs", choices=["all", "last month", "last year"], type=str, default="all")
+
+    args = parser.parse_args()
+
+if __name__ == "__main__":
+    main()

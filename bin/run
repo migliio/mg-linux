@@ -50,7 +50,8 @@ def get_run_config() -> RunConfig:
         )
     
 # Kernel related utility functions
-def build_run(commands: list, working_dir: Path) -> None:
+
+def run_subprocess_in_dir(commands: list, working_dir: Path) -> None:
     for cmd in commands:
         try:
             subprocess.run(cmd, cwd=working_dir,  check=True)
@@ -59,30 +60,37 @@ def build_run(commands: list, working_dir: Path) -> None:
             print(f"Error output: {e.output}")
             exit(1)
 
+def enable_lsp_support(run_config: RunConfig) -> None:
+    commands = [
+        "./scripts/clang-tools/gen_compile_commands.py"
+    ]
+    print(f"Enabling LSP support in the kernel directory {run_config.kernel_dir}")
+    run_subprocess_in_dir(commands, run_config.kernel_dir)
+            
 def build_k_x64(run_config: RunConfig) -> None:
     commands = [
-        "/usr/bin/make x86_64_defconfig".split(),
-        "/usr/bin/make -j8 all".split()        
+        "/usr/bin/make CC=clang x86_64_defconfig".split(),
+        "/usr/bin/make CC=clang -j8 all".split()
     ]
     print(f"Building the kernel located at {run_config.kernel_dir} with x86_64 config")
-    build_run(commands, run_config.kernel_dir)
+    run_subprocess_in_dir(commands, run_config.kernel_dir)
 
 def build_k_i386(run_config: RunConfig) -> None:
     commands = [
-        "/usr/bin/make i386_defconfig".split(),
-        "/usr/bin/make -j8 all".split()
+        "/usr/bin/make CC=clang i386_defconfig".split(),
+        "/usr/bin/make CC=clang -j8 all".split()
     ]
     print(f"Building the kernel located at {run_config.kernel_dir} with i386 config")
-    build_run(commands, run_config.kernel_dir)
+    run_subprocess_in_dir(commands, run_config.kernel_dir)
 
 def build_k_arm64(run_config: RunConfig) -> None:
     commands = [
-        "/usr/bin/make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf vexpress_defconfig".split(),
-        "/usr/bin/make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf -j8 zImage dtbs".split(),
-        "/usr/bin/make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf -j8 modules modules_install".split()
+        "/usr/bin/make CC=clang ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf vexpress_defconfig".split(),
+        "/usr/bin/make CC=clang ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf -j8 zImage dtbs".split(),
+        "/usr/bin/make CC=clang ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf -j8 modules modules_install".split()
     ]
     print(f"Building the kernel located at {run_config.kernel_dir} with arm64 config")
-    build_run(commands, run_config.kernel_dir)
+    run_subprocess_in_dir(commands, run_config.kernel_dir)
 
 def build_k(args: argparse.Namespace, run_config: RunConfig) -> None:
     match args.arch:
@@ -95,6 +103,8 @@ def build_k(args: argparse.Namespace, run_config: RunConfig) -> None:
         case _:
             print(f'Architecture not supported yet!')
             exit(1)
+    if args.lsp_enable:
+        enable_lsp_support(run_config)            
     build_fs(args, run_config)
 
 def build_fs_i386(run_config: RunConfig) -> None:
@@ -102,15 +112,15 @@ def build_fs_i386(run_config: RunConfig) -> None:
 
 def build_fs_x64(run_config: RunConfig) -> None:
     commands = [
-        "make defconfig".split(),
-        "LDFLAGS=\"--static\" make -j4 install".split(),
+        "make CC=clang defconfig".split(),
+        "LDFLAGS=\"--static\" make CC=clang -j4 install".split(),
         "/usr/bin/mkdir -p /staging/initramfs/fs".split(),
         "mkdir -pv bin sbin etc proc sys usr/bin usr/sbin".split(),
         "cp -av /sources/".join(run_config.busybox_dir).join("/_install/* .").split(),
         "cp /scripts/init .".split(),
         "find . -print0 | cpio --null -ov --format=newc | gzip -9 > /staging/initramfs-busybox-x86.cpio.gz".split(),
     ]
-    build_run(commands, run_config.busybox_dir)
+    run_subprocess_in_dir(commands, run_config.busybox_dir)
     
 def build_fs(args: argparse.Namespace, run_config: RunConfig) -> None:
     match args.arch:
@@ -120,9 +130,34 @@ def build_fs(args: argparse.Namespace, run_config: RunConfig) -> None:
             build_fs_x64(run_config)
         case 'arm64':
             build_fs_arm64(run_config)
+
+def run_k_arm64(run_config: RunConfig, with_lsp: bool) -> None:
+    return 0
+def run_k_x64(run_config: RunConfig, with_lsp: bool) -> None:
+    commands = [
+        "qemu-system-x86_64 -s -smp 4 -kernel /sources/linux/arch/x86_64/boot/bzImage -initrd /staging/initramfs-busybox-x86.cpio.gz -append \"console=ttyS0 init=/init\" -vnc :0 -k en-us -nographic".split()
+    ]
+    run_subprocess_in_dir(commands, run_config.kernel_dir)
+    
+def run_k_i386(run_config: RunConfig, with_lsp: bool) -> None:
+    return 0
             
 def run_k(args: argparse.Namespace, run_config: RunConfig) -> None:
-    return 0
+    print(args)
+    exit(1)
+    match args.arch:
+        case 'x86':
+            run_k_i386(run_config)
+        case 'x86_64':
+            run_k_x64(run_config)
+        case 'arm64':
+            run_k_arm64(run_config)        
+
+def check_permissions() -> None:
+    if os.geteuid() != 0:
+        print(f"You are not running as root, this program requires you to have root privileges. Try again!")
+        exit(1)
+            
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="run",
@@ -157,6 +192,8 @@ def main() -> None:
     if len(sys.argv) == 1:
         parser.print_help()
         parser.exit()
+
+    check_permissions()
 
     args = parser.parse_args()
     args.func(args, get_run_config())

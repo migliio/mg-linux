@@ -4,8 +4,8 @@ import argparse
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="dev",
-        description="`dev` is a kernel helper that I use to automate some development-related tasks in my day-to-day work with the Linux kernel.")
+        prog="kdev",
+        description="`kdev` is a kernel helper that I use to automate some development-related tasks in my day-to-day work with the Linux kernel.")
 
     subparsers = parser.add_subparsers(
         title="command", description="command to run", dest="command")

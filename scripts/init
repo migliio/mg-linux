@@ -1,0 +1,11 @@
+#!/bin/sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+echo "Boot took $(cut -d' ' -f1 /proc/uptime) seconds"
+echo "+---------------------------------------------+"
+echo "Welcome to kernel playground env"
+echo "Type CTRL-A x to exit QEMU"
+echo ""
+exec /bin/sh

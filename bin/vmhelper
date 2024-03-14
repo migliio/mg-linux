@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+
+import argparse
+import configparser
+import sys
+import glob
+import subprocess
+
+from pathlib import Path
+
+__global_config_file = Path.home().joinpath(".config/mgvmhelper.conf")
+
+class VmhelperConfig:
+    def __init__(
+            self,
+            vm_dir: Path
+    ) -> None:
+        self.vm_dir = vm_dir
+
+# utility functions
+
+def run_subprocess_in_dir(commands: list, working_dir: Path) -> None:
+    for cmd in commands:
+        print(f"[INFO] Executing command '{cmd}' in directory '{working_dir}'")
+        try:
+            subprocess.run(cmd, cwd=working_dir,  check=True, shell=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Got an error executing command: {cmd}")
+            print(f"[ERROR] Error output: {e.output}")
+            exit(1)
+
+def prompt_yes_no(prompt: str, default: bool = True) -> bool:
+    prompt += " [Y/n] " if default else " [y/N] "
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    answer = input().strip().lower()
+    if answer.startswith("y"):
+        return True
+    elif answer.startswith("n"):
+        return False
+    else:
+        return default
+
+# vm-related functions
+
+def get_vmhelper_config() -> VmhelperConfig:
+    config = configparser.ConfigParser()
+    if not __global_config_file.exists():
+        print(f"Configuration file '~/.config/vmkhelper.conf' not found.")
+        if prompt_yes_no("Do you want to go with the default one?"):
+            return VmhelperConfig(
+                vm_dir=Path("/home/claudio/sources/vm")
+            )
+    else:
+        config.read(__global_config_file)
+        return VmhelperConfig(
+            vm_dir=config['Paths']['vmdir']
+        )
+    
+def download_latest_nixos(vmhelper_config: VmhelperConfig) -> None:
+    commands = [
+        "wget https://channels.nixos.org/nixos-23.05/latest-nixos-minimal-x86_64-linux.iso"
+    ]
+    if vmhelper_config.vm_dir.exists():
+        run_subprocess_in_dir(commands, vmhelper_config.vm_dir)
+    else:
+        vmhelper_config.vm_dir.mkdir()
+        run_subprocess_in_dir(commands, vmhelper_config.vm_dir)
+
+def exist_image(vmhelper_config: VmhelperConfig) -> bool:
+    candidates = glob.glob(str(vmhelper_config.vm_dir) + "/latest-nixos-minimal-*.iso")
+    if candidates == []:
+        return False
+    else:
+        return True
+    
+def vm_run(args: argparse.Namespace, vmhelper_config: VmhelperConfig) -> None:
+    commands = []
+    if args.image == None and not exist_image(vmhelper_config):
+        download_latest_nixos(vmhelper_config)
+    if not vmhelper_config.vm_dir.joinpath("/nixos.qcow2").exists():
+        commands.append("qemu-img create -f qcow2 " + str(vmhelper_config.vm_dir.joinpath("nixos.qcow2")) + " 250G")
+    commands.append("qemu-system-x86_64 -hda " + str(vmhelper_config.vm_dir.joinpath("nixos.qcow2")) + " -m 512 -net nic,model=virtio -net user -cdrom " + glob.glob(str(vmhelper_config.vm_dir) + "/latest-nixos-minimal-*.iso")[0] + " -vga std -boot strict=on")
+    run_subprocess_in_dir(commands, vmhelper_config.vm_dir)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="vmhelper",
+        description="`vmhelper` is a virtual machine helper that I use to automate some compilation and running tasks in my day-to-day work with the Linux kernel.")
+
+    parser.add_argument("-v", "--verbose", help="Provide exhaustive output logs from all the tools used internally by `vmhelper`", action="store_true")
+
+    subparsers = parser.add_subparsers(
+        title="command", description="command to run", dest="command")
+    
+    parser_vm = subparsers.add_parser(
+        "vm",
+        help="Create a NixOS virtual machine and launch it using QEMU",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser_vm.add_argument("-i", "--image", help="NixOS image used by QEMU to run", type=Path)
+
+    parser_vm.set_defaults(func=vm_run)
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        parser.exit()
+
+    args = parser.parse_args()
+    args.func(args, get_vmhelper_config())
+
+if __name__ == "__main__":
+    main()

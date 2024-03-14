@@ -22,7 +22,6 @@ class KhelperConfig:
         self.busybox_dir = busybox_dir
         self.vm_dir = vm_dir
 
-
 def list_str(values):
     return values.split(',')
 
@@ -148,14 +147,14 @@ def build_fs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
 
 def launch_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     if args.kernel_image == None:
-        args.kernel_image = Path("").joinpath("/arch/x86_64/boot/bzImage")
+        args.kernel_image = khelper_config.kernel_dir.joinpath("/arch/x86_64/boot/bzImage")
     if args.debug:
         commands = [
-            ("qemu-system-x86_64 -s -smp 2 -kernel " + str(khelper_config.kernel_dir) + str(args.kernel_image) + " -initrd " + str(args.file_system) + " -append \"console=ttyS0 init=/init\" -k en-us -nographic")
+            "qemu-system-x86_64 -s -smp 2 -kernel " + str(args.kernel_image) + " -initrd " + str(args.file_system) + " -append \"console=ttyS0 init=/init\" -k en-us -nographic"
         ]
     else:
         commands = [
-            ("qemu-system-x86_64 -s -smp 2 -kernel " + str(khelper_config.kernel_dir) + str(args.kernel_image) + " -initrd " + str(args.file_system) + " -append \"console=ttyS0 init=/init\" -k en-us -nographic")
+            "qemu-system-x86_64 -smp 2 -kernel " + str(args.kernel_image) + " -initrd " + str(args.file_system) + " -append \"console=ttyS0 init=/init\" -k en-us -nographic"
         ]        
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
     
@@ -177,27 +176,15 @@ def gdb_run(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     ]
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
 
-def download_latest_nixos(khelper_config: KhelperConfig) -> None:
+def decompress_initramfs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
+    target = args.target_directory.joinpath("/initramfs")
     commands = [
-        "wget https://channels.nixos.org/nixos-23.05/latest-nixos-minimal-x86_64-linux.iso"
+        "mkdir -p " + str(args.target_directory) + "/initramfs"
     ]
-    run_subprocess_in_dir(commands, khelper_config.vm_dir)
-
-def exist_image(khelper_config: KhelperConfig) -> bool:
-    candidates = glob.glob(str(khelper_config.vm_dir) + "/latest-nixos-minimal-*.iso")
-    if candidates == []:
-        return False
-    else:
-        return True
-    
-def vm_run(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
-    commands = []
-    if args.image == None and not exist_image(khelper_config):
-        download_latest_nixos(khelper_config)
-    if not khelper_config.vm_dir.joinpath("/nixos.qcow2").exists():
-        commands.append("qemu-img create -f qcow2 " + str(khelper_config.vm_dir.joinpath("nixos.qcow2")) + " 250G")
-    commands.append("qemu-system-x86_64 -hda " + str(khelper_config.vm_dir.joinpath("nixos.qcow2")) + " -m 512 -net nic,model=virtio -net user -cdrom " + glob.glob(str(khelper_config.vm_dir) + "/latest-nixos-minimal-*.iso")[0] + " -vga std -boot strict=on")
-    run_subprocess_in_dir(commands, khelper_config.vm_dir)
+    run_subprocess_in_dir(commands, Path.cwd())
+    commands = [
+        "cp " + str(
+    ]
     
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -214,10 +201,8 @@ def main() -> None:
         help="Build the Linux kernel specified in the khelper configuration file",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser_build.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
     parser_build.add_argument("-lsp", "--lsp-enable", help="Option on whether to enable LSP support when building the kernel", action="store_true")
-
     parser_build.set_defaults(func=build_k)
 
     parser_initramfs = subparsers.add_parser(
@@ -225,11 +210,8 @@ def main() -> None:
         help="Build the file system with the Busybox source specified in the khelper configuration file",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser_initramfs.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
-    
     parser_initramfs.add_argument("-i", "--include", help="List of files to include in the initramfs", type=list_str)
-
     parser_initramfs.set_defaults(func=build_fs)    
 
     parser_run = subparsers.add_parser(
@@ -237,13 +219,10 @@ def main() -> None:
         help="Launch the Linux kernel environment using QEMU",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser_run.add_argument("arch", help="Target architecture for which we want to run the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
-    
     parser_run.add_argument("-d","--debug", help="Launch QEMU with the `-s` option to allow `gdb` to connect", action="store_true")
     parser_run.add_argument("-k", "--kernel-image", help="Target kernel image (i.e., bzImage) to run in QEMU", type=Path)
-    parser_run.add_argument("-f", "--file-system", help="Target initramfs (in .gz format) used to run the kernel in QEMU", type=Path, default=Path("/tmp/staging/initramfs-busybox-x86.cpio.gz"))
-
+    parser_run.add_argument("-f", "--file-system", help="Target initramfs used to run the kernel in QEMU", type=Path, default=Path("/tmp/staging/initramfs-busybox-x86.cpio.gz"))
     parser_run.set_defaults(func=launch_k)
 
     parser_gdb = subparsers.add_parser(
@@ -251,20 +230,17 @@ def main() -> None:
         help="Launch `gdb` to debug the Linux kernel running in QEMU",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
     parser_gdb.add_argument("-p","--port", help="Port used by `gdb` to connect to the running QEMU instance", type=str, default="1234")
-
     parser_gdb.set_defaults(func=gdb_run)
 
-    parser_vm = subparsers.add_parser(
-        "vm",
-        help="Create a NixOS virtual machine and launch it using QEMU",
+    parser_decompress = subparsers.add_parser(
+        "decompress",
+        help="Decompress an initramfs file from its .gz form",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
-    parser_vm.add_argument("-i", "--image", help="NixOS image used by QEMU to run", type=Path)
-
-    parser_vm.set_defaults(func=vm_run)
+    parser_decompress.add_argument("initramfs", help="Initramfs file in gz format to be decompressed", type=Path)
+    parser_decompress.add_argument("-d", "--target-directory", help="The directory where to uncompres the initramfs in input", type=Path, default=Path("."))
+    parser_decompress.set_defaults(func=decompress_initramfs)
 
     if len(sys.argv) == 1:
         parser.print_help()

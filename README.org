@@ -1,3 +1,7 @@
 #+TITLE: My Linux kernel utils
 #+AUTHOR: Claudio Migliorelli (@mg)
-This is a directory containing files I collected during some years of kernel development/hacking. Most of them are convenient small utils I use when dealing with CTF challenges or kernel development tasks. These scripts heavily rely on the assumption that the kernel will run with QEMU with a minimal rootfs.
+* Description
+This is a directory containing files I collected during some years of kernel development/hacking. Most of them were conceived as convenient and small scripts I use when dealing with CTF challenges or kernel development tasks.
+However, after some time I realized that it could have been better to introduce a unified, structured and python-based swiss-army-knife to all the automated tasks I do in my day-to-day work with the Linux kernel.
+
+All the provided binaries heavily rely on the assumption that the kernel will run with QEMU with a minimal rootfs. There is still a in-progress binary to handle VM creation, useful for all these situations where having a minimal QEMU system that simply boots the kernel is not sufficient.

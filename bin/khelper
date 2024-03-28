@@ -22,7 +22,9 @@ class KhelperConfig:
         self.busybox_dir = busybox_dir
         self.vm_dir = vm_dir
 
-def list_str(values):
+# General utility functions
+        
+def list_str(values: list):
     return values.split(',')
 
 def prompt_yes_no(prompt: str, default: bool = True) -> bool:
@@ -36,6 +38,16 @@ def prompt_yes_no(prompt: str, default: bool = True) -> bool:
         return False
     else:
         return default
+
+def run_subprocess_in_dir(commands: list, working_dir: Path) -> None:
+    for cmd in commands:
+        print(f"[INFO] Executing command '{cmd}' in directory '{working_dir}'")
+        try:
+            subprocess.run(cmd, cwd=working_dir,  check=True, shell=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] Got an error executing command: {cmd}")
+            print(f"[ERROR] Error output: {e.output}")
+            exit(1)
 
 # Configuration file related utility functions
     
@@ -59,16 +71,6 @@ def get_khelper_config() -> KhelperConfig:
     
 # Kernel related utility functions
 
-def run_subprocess_in_dir(commands: list, working_dir: Path) -> None:
-    for cmd in commands:
-        print(f"[INFO] Executing command '{cmd}' in directory '{working_dir}'")
-        try:
-            subprocess.run(cmd, cwd=working_dir,  check=True, shell=True)
-        except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Got an error executing command: {cmd}")
-            print(f"[ERROR] Error output: {e.output}")
-            exit(1)
-
 def enable_lsp_support(khelper_config: KhelperConfig) -> None:
     commands = [
         "./scripts/clang-tools/gen_compile_commands.py"
@@ -84,6 +86,7 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "/usr/bin/make CC=clang kvm_guest.config",
         "./scripts/config --set-val CONFIG_DEBUG_INFO y",
         "./scripts/config --set-val CONFIG_DEBUG_KERNEL y",
+        "./scripts/config --set-val CONFIG_CC_OPTIMIZE_FOR_DEBUGGING y",        
         "./scripts/config --set-val CONFIG_KCOV y",
         "./scripts/config --set-val CONFIG_GDB_SCRIPTS y",
         "./scripts/config --set-val CONFIG_DEBUG_INFO_REDUCED n",
@@ -96,6 +99,7 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "./scripts/config --set-val CONFIG_CMDLINE_BOOL y",
         "./scripts/config --set-val CONFIG_RANDOMIZE_BASE n",
         "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",
+        "./scripts/config --set-val CONFIG_CHECKPOINT_RESTORE y",
         "/usr/bin/make CC=clang olddefconfig",
         "/usr/bin/make CC=clang scripts_gdb",
         "/usr/bin/make WERROR=0 CC=clang -j`nproc` all"
@@ -135,10 +139,10 @@ def clean_k(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     ]
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
 
-def build_fs_i386(khelper_config: KhelperConfig) -> None:
+def build_fs_i386(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     return 0
 
-def build_fs_x64(khelper_config: KhelperConfig) -> None:
+def build_fs_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = [
         "/usr/bin/mkdir -p /tmp/staging",
         "/usr/bin/make CC=clang defconfig",
@@ -147,23 +151,31 @@ def build_fs_x64(khelper_config: KhelperConfig) -> None:
     ]
     run_subprocess_in_dir(commands, khelper_config.busybox_dir)
     commands = [
-        "/usr/bin/mkdir -pv bin sbin etc proc sys usr/bin usr/sbin",
+        "/usr/bin/mkdir -pv bin sbin etc proc sys tmp usr/bin usr/sbin",
         ("/usr/bin/cp -av " + " ".join(glob.glob(str(khelper_config.busybox_dir) + "/_install/*")) +  " ."),
-        "/usr/bin/cp ~/tools/mg-linux/scripts/init .",
-        "/usr/bin/find . -print0 | cpio --null -ov --format=newc | gzip -9 > /tmp/staging/initramfs-busybox-x86.cpio.gz",
+        "/usr/bin/cp ~/tools/mg-linux/scripts/init ."
     ]
+    if (args.include != None):
+        for curr_file in args.include:
+            curr = Path(curr_file)
+            if not curr.exists():
+                print("[WARNING] Provided file '{str(curr)}' does not exist, skipping it")
+            else:
+                commands.append("/usr/bin/cp " + str(curr) + " .")
+    commands.append("/usr/bin/find . -print0 | cpio --null -ov --format=newc | gzip -9 > /tmp/staging/initramfs-busybox-x86.cpio.gz")
     run_subprocess_in_dir(commands, Path("/tmp/staging/initramfs/fs"))
     
 def build_fs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
+    if args.busybox_dir != None:
+        khelper_config.busybox_dir = args.busybox_dir
     match args.arch:
         case 'x86':
-            build_fs_i386(khelper_config)
+            build_fs_i386(args, khelper_config)
         case 'x86-64':
-            build_fs_x64(khelper_config)
+            build_fs_x64(args, khelper_config)
         case _:
             print(f'[ERROR] Architecture not supported yet!')
-            exit(1)            
-        
+            exit(1)
 
 def launch_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     if args.kernel_image == None:
@@ -191,48 +203,64 @@ def launch_k(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
             assert False, "Unreachable code; are you messing up with the memory?"
             
 def gdb_run(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
-    if args.kernel_dir != None:
-        khelper_config.kernel_dir = args.kernel_dir
+    if args.kernel_image == None:
+        commands = [
+            "gdb -ex 'target remote localhost:" + str(args.port) + "'"
+        ]
+    else:
+        commands = [
+            "gdb -ex 'target remote localhost:" + str(args.port) + "' " + str(args.kernel_image.absolute())
+        ]
+    run_subprocess_in_dir(commands, Path().cwd())
+
+def compress_initramfs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = [
-        "gdb -ex 'target remote localhost:1234' vmlinux"
-    ]
-    run_subprocess_in_dir(commands, khelper_config.kernel_dir)
+        "find . -print0 | cpio --null -ov --format=newc | gzip -9 > " + str(args.output_file)
+        ]
+    run_subprocess_in_dir(commands, args.initramfs)
 
 def decompress_initramfs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
-    if os.getuid != 0:
+    if os.getuid() != 0:
         print(f"[ERROR] To decompress an initramfs file, `khelper` uses `cpio -idm`, which requires root privileges, try again!")
         exit(1)
-    target = args.target_directory.joinpath("initramfs")
     if str(args.initramfs).endswith(".gz"):
-        if not target.exists():
+        if not args.output_directory.exists():
             commands = [
-                "mkdir -p " + str(target)
+                "mkdir -p " + str(args.output_directory)
             ]
             run_subprocess_in_dir(commands, Path.cwd())
         commands = [
             "cp " + str(args.initramfs) + " ./initramfs.cpio.gz",
-            "gunzip ./initramfs.cpio.gz",
-            "cpio -idm < ./initramfs.cpio",
-            "rm ./initramfs.cpio"
+            "gunzip ./initramfs.cpio.gz"
         ]
-        run_subprocess_in_dir(commands, target)
+        run_subprocess_in_dir(commands, args.output_directory.parent)
+        commands = [
+            "cpio -idm < ../initramfs.cpio",
+            "rm ../initramfs.cpio",
+        ]
+        run_subprocess_in_dir(commands, args.output_directory)
     elif str(args.initramfs).endswith(".cpio"):
-        if not target.exists():
+        if not args.output_directory.exists():
             commands = [
-                "mkdir -p " + str(target)
+                "mkdir -p " + str(args.output_directory)
             ]
             run_subprocess_in_dir(commands, Path.cwd())
         commands = [
             "cpio -idm < " + str(args.initramfs),
         ]
-        run_subprocess_in_dir(commands, target)            
+        run_subprocess_in_dir(commands, args.output_directory)
     else:
         print(f"[ERROR] Unrecognized extension for a compressed initramfs")
         exit(1)
+    commands = [
+        "chown -R claudio:claudio ./initramfs",
+        "chown claudio:claudio ./initramfs"
+    ]
+    run_subprocess_in_dir(commands, args.output_directory.parent)
 
 def decompress_image(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = [
-        "./scripts/extract-vmlinux " + str(args.image) + " > " + str(args.target_directory.joinpath("vmlinux").absolute())
+        "./scripts/extract-vmlinux " + str(args.image) + " > " + str(args.target_image.absolute())
     ]
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
 
@@ -241,30 +269,23 @@ def compile_and_compress_exploit(args: argparse.Namespace, khelper_config: Khelp
         print(f"[ERROR] The exploit source file provided is not a `.c` file")
         exit(1)
     commands = [
-        "clang -o " + str(args.file_system_dir.joinpath("exploit")) + "-static " + str(args.exploit),
-        "find . -print0 | cpio --null -ov --format=newc | gzip -9 > " + str(args.output_file)
+        "clang -o " + str(args.initramfs.joinpath("exploit")) + " -static " + str(args.exploit),
+        "cp " + str(args.initramfs.joinpath("exploit")) + " " + str(args.exploit.parent)
     ]
-    run_subprocess_in_dir(commands, args.file_system_dir)
-    
-
-# TODO
-def all_in_one_exploit(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
-    decompress_initramfs(args, khelper_config)
-    return 0
+    run_subprocess_in_dir(commands, args.initramfs)
+    compress_initramfs(args, khelper_config)
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="khelper",
         description="`khelper` is a kernel helper that I use to automate some compilation and running tasks in my day-to-day work with the Linux kernel.")
 
-    parser.add_argument("-v", "--verbose", help="Provide exhaustive output logs from all the tools used internally by `khelper`", action="store_true")
-
     subparsers = parser.add_subparsers(
         title="command", description="command to run", dest="command")
 
     parser_build = subparsers.add_parser(
         "build",
-        help="Build the Linux kernel specified in the khelper configuration file",
+        help="Build a Linux kernel either specified in the khelper configuration file or provided as command line argument",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_build.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
@@ -275,7 +296,7 @@ def main() -> None:
 
     parser_clean = subparsers.add_parser(
         "clean",
-        help="Clean the Linux kernel specified in the khelper configuration file",
+        help="Clean a Linux kernel either specified in the khelper configuration file or provided as command line argument",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_clean.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)
@@ -284,12 +305,13 @@ def main() -> None:
 
     parser_initramfs = subparsers.add_parser(
         "initramfs",
-        help="Build the file system with the Busybox source specified in the khelper configuration file",
+        help="Build the file system with the Busybox source specified either in the khelper configuration file or as a command line argument",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_initramfs.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
-    parser_initramfs.add_argument("-i", "--include", help="List of files to include in the initramfs", type=list_str)
-    parser_initramfs.set_defaults(func=build_fs)    
+    parser_initramfs.add_argument("-i", "--include", help="List of comma-separated files to include in the initramfs", type=list_str)
+    parser_initramfs.add_argument("-d", "--busybox-dir", help="Use a different busybox source instead of the one specified in the khelper configuration file", type=list_str)
+    parser_initramfs.set_defaults(func=build_fs)
 
     parser_run = subparsers.add_parser(
         "launch",
@@ -307,8 +329,8 @@ def main() -> None:
         help="Launch `gdb` to debug the Linux kernel running in QEMU",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    parser_gdb.add_argument("-k", "--kernel-image", help="Target kernel image used for symbols", type=Path)
     parser_gdb.add_argument("-p","--port", help="Port used by `gdb` to connect to the running QEMU instance", type=str, default="1234")
-    parser_gdb.add_argument("-d", "--kernel-dir", help="Target kernel directory where the vmlinux used for symbols is located", type=Path)
     parser_gdb.set_defaults(func=gdb_run)
 
     parser_initramfs_decompress = subparsers.add_parser(
@@ -317,16 +339,25 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_initramfs_decompress.add_argument("initramfs", help="Initramfs file to be decompressed", type=Path)
-    parser_initramfs_decompress.add_argument("-d", "--target-directory", help="The directory where to decompress the initramfs in input", type=Path, default=Path("."))
+    parser_initramfs_decompress.add_argument("-o", "--output-directory", help="The directory where to decompress the initramfs in input", type=Path, default=Path("."))
     parser_initramfs_decompress.set_defaults(func=decompress_initramfs)
+
+    parser_initramfs_compress = subparsers.add_parser(
+        "initramfs-compress",
+        help="Comprsss an initramfs directory into a .gz file",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_initramfs_compress.add_argument("initramfs", help="Initramfs directory to be compressed", type=Path)
+    parser_initramfs_compress.add_argument("-o", "--output-file", help="The path of the output initramfs in compressed form", type=Path, default=Path("/tmp/staging/initramfs-busybox-x86.cpio.gz"))
+    parser_initramfs_compress.set_defaults(func=compress_initramfs)
 
     parser_image_decompress = subparsers.add_parser(
         "image-decompress",
-        help="Decompress a vmlinuz file to its vmlinux form",
+        help="Decompress a bzImage/vmlinuz file to its vmlinux form",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_image_decompress.add_argument("image", help="`vmlinuz` file to be decompressed", type=Path)
-    parser_image_decompress.add_argument("-d", "--target-directory", help="The directory where to decompress the kernel image in input", type=Path, default=Path("."))
+    parser_image_decompress.add_argument("image", help="`vmlinuz`/`bzImage` file to be decompressed", type=Path)
+    parser_image_decompress.add_argument("-o", "--target-image", help="The path where to decompress the kernel image in input", type=Path, default=Path("."))
     parser_image_decompress.set_defaults(func=decompress_image)
 
     parser_exploit_compile_compress = subparsers.add_parser(
@@ -336,19 +367,18 @@ def main() -> None:
     )
     parser_exploit_compile_compress.add_argument("exploit", help="The exploit in `.c` format to compile", type=Path)
     parser_exploit_compile_compress.add_argument("arch", help="Target architecture for which we want to compile the exploit", choices=["x86-64", "x86"], type=str, default="x86-64")
-    parser_exploit_compile_compress.add_argument("file-system-dir", help="The initramfs directory where we want to include the exploit", type=Path)
+    parser_exploit_compile_compress.add_argument("initramfs", help="The initramfs directory where we want to include the exploit", type=Path)
     parser_exploit_compile_compress.add_argument("-o", "--output-file", help="The path of the output initramfs in compressed form", type=Path, default=Path("/tmp/staging/initramfs-busybox-x86.cpio.gz"))
     parser_exploit_compile_compress.set_defaults(func=compile_and_compress_exploit)
 
-    parser_exploit_decompress_compile_compress = subparsers.add_parser(
-        "all-in-one-exploit",
-        help="Decompress an initramfs, compile a kernel exploit in `.c` form, include it in the initramfs, and compress the initramfs again",
+    parser_ctf = subparsers.add_parser(
+        "ctf",
+        help="[TODO] Create a convenient environment for a CTF challenge",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_exploit_decompress_compile_compress.add_argument("exploit", help="The exploit in `.c` format to compile", type=Path)
-    parser_exploit_decompress_compile_compress.add_argument("initramfs", help="Initramfs file to be decompressed", type=Path)
-    parser_exploit_decompress_compile_compress.add_argument("-o", "--output-file", help="The path of the output initramfs in compressed form", type=Path, default=Path("/tmp/staging/initramfs-busybox-x86.cpio.gz"))
-    parser_exploit_decompress_compile_compress.set_defaults(func=all_in_one_exploit)
+    parser_ctf.add_argument("bzImage", help="The bzImage provided by the challenge to extract some symbols through kallsyms", type=Path)
+    parser_ctf.add_argument("initramfs", help="The compressed initramfs provided by the challenge to extract and uncompressed one", type=Path)
+    parser_ctf.add_argument("output", help="The output directory where to put all the artifacts extracted and ready to be used in the CTF", default=Path("/tmp/ctf"))
 
     if len(sys.argv) == 1:
         parser.print_help()

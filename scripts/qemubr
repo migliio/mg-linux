@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+if [ "$#" -ne 3 ]; then
+    echo "usage: ./qemubr <kernel-image> <fs-image> <shared-folder>"
+    exit 1
+fi
+qemu-system-x86_64 -s \
+		   -M pc \
+		   -kernel $1 \
+		   -drive file=$2,if=virtio,format=raw \
+		   -fsdev local,security_model=passthrough,id=fsdev0,path=$3 \
+		   -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hostshare \
+		   -append "rootwait root=/dev/vda console=ttyS0 nokaslr" \
+		   -net user,hostfwd=tcp::10022-:22 \
+		   -net nic,model=virtio \
+		   -nographic \

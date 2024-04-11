@@ -80,7 +80,8 @@ def enable_lsp_support(khelper_config: KhelperConfig) -> None:
             
 def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = []
-    commands.append(args.commands_hook)
+    if args.commands_hook != None:
+        commands.append(args.commands_hook)
     config_commands = [
         "/usr/bin/make CC=clang defconfig",
         "/usr/bin/make CC=clang kvm_guest.config"
@@ -92,6 +93,7 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "./scripts/config --set-val CONFIG_DEBUG_KERNEL y",
         "./scripts/config --set-val CONFIG_CC_OPTIMIZE_FOR_DEBUGGING y",
         "./scripts/config --set-val CONFIG_GDB_SCRIPTS y",
+        "./scripts/config --set-val CONFIG_KCOV y",        
         "./scripts/config --set-val CONFIG_DEBUG_INFO_REDUCED n",
         "./scripts/config --set-val CONFIG_FRAME_POINTER y",
         "./scripts/config --set-val CONFIG_DEBUG_INFO_DWARF4 y",
@@ -103,40 +105,13 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "./scripts/config --set-val CONFIG_CHECKPOINT_RESTORE y",
     ]
     for cmd in custom_config_commands:
-        commands.append(cmd)    
-    if args.kcov_enable:
-        kcov_config_commands = [
-            "./scripts/config --set-val CONFIG_KCOV y",
-        ]
-        for cmd in kcov_config_commands:
-            commands.append(cmd)
+        commands.append(cmd) 
     if args.kasan_enable:
         kasan_config_commands = [
             "./scripts/config --set-val CONFIG_KASAN y",
             "./scripts/config --set-val CONFIG_KASAN_INLINE y",
         ]
         for cmd in kasan_config_commands:
-            commands.append(cmd)
-    if args.ebpf_enable:
-        ebpf_config_commands = [
-            "./scripts/config --set-val CONFIG_BPF y",
-            "./scripts/config --set-val CONFIG_BPF_SYSCALL y",
-            "./scripts/config --set-val CONFIG_BPF_JIT y",
-            "./scripts/config --set-val CONFIG_HAVE_EBPF_JIT y",
-            "./scripts/config --set-val CONFIG_BPF_EVENTS y",
-            "./scripts/config --set-val CONFIG_FTRACE_SYSCALLS y",
-            "./scripts/config --set-val CONFIG_FUNCTION_TRACER y",
-            "./scripts/config --set-val CONFIG_HAVE_DYNAMIC_FTRACE y",
-            "./scripts/config --set-val CONFIG_DYNAMIC_FTRACE y",
-            "./scripts/config --set-val CONFIG_HAVE_KPROBES y",
-            "./scripts/config --set-val CONFIG_KPROBES y",
-            "./scripts/config --set-val CONFIG_KPROBE_EVENTS y",
-            "./scripts/config --set-val CONFIG_ARCH_SUPPORTS_UPROBES y",
-            "./scripts/config --set-val CONFIG_UPROBES y",
-            "./scripts/config --set-val CONFIG_UPROBE_EVENTS y",
-            "./scripts/config --set-val CONFIG_DEBUG_FS y",
-        ]
-        for cmd in ebpf_config_commands:
             commands.append(cmd)
     compile_commands = [
         "/usr/bin/make CC=clang olddefconfig",
@@ -356,8 +331,6 @@ def main() -> None:
     parser_build.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
     parser_build.add_argument("-lsp", "--lsp-enable", help="Enable LSP support when building the kernel", action="store_true")
     parser_build.add_argument("-kasan", "--kasan-enable", help="Enable `kasan` support when building the kernel", action="store_true")
-    parser_build.add_argument("-kcov", "--kcov-enable", help="Enable `kcov` support when building the kernel", action="store_true")
-    parser_build.add_argument("-ebpf", "--ebpf-enable", help="Enable `ebpf` support when building the kernel", action="store_true")
     parser_build.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)
     parser_build.add_argument("-c", "--commands-hook", help="Series of commands to execute in the kernel directory before compiling", type=str)
     parser_build.set_defaults(func=build_k)

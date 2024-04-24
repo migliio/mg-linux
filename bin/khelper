@@ -57,9 +57,9 @@ def get_khelper_config() -> KhelperConfig:
         print(f"Configuration file '~/.config/mgkhelper.conf' not found.")
         if prompt_yes_no("Do you want to go with the default one?"):
             return KhelperConfig(
-                kernel_dir=Path("/home/claudio/sources/linux"),
-                busybox_dir=Path("/home/claudio/sources/busybox"),
-                vm_dir=Path("/home/claudio/sources/vm")
+                Path.home().joinpath("sources/linux"),
+                Path.home().joinpath("sources/busybox"),
+                Path.home().joinpath("sources/vm"),
             )
     else:
         config.read(__global_config_file)
@@ -84,7 +84,6 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         commands.append(args.commands_hook)
     config_commands = [
         "/usr/bin/make CC=clang defconfig",
-        "/usr/bin/make CC=clang kvm_guest.config"
     ]
     for cmd in config_commands:
         commands.append(cmd)
@@ -103,6 +102,8 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "./scripts/config --set-val CONFIG_RANDOMIZE_BASE n",
         "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",
         "./scripts/config --set-val CONFIG_CHECKPOINT_RESTORE y",
+        "/usr/bin/make CC=clang olddefconfig",
+        "/usr/bin/make CC=clang scripts_gdb",        
     ]
     for cmd in custom_config_commands:
         commands.append(cmd) 
@@ -113,9 +114,10 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         ]
         for cmd in kasan_config_commands:
             commands.append(cmd)
+    if args.config_only:
+        run_subprocess_in_dir(commands, khelper_config.kernel_dir)
+        return
     compile_commands = [
-        "/usr/bin/make CC=clang olddefconfig",
-        "/usr/bin/make CC=clang scripts_gdb",
         "/usr/bin/make WERROR=0 CC=clang -j`nproc` all"
     ]
     for cmd in compile_commands:
@@ -333,6 +335,7 @@ def main() -> None:
     parser_build.add_argument("-kasan", "--kasan-enable", help="Enable `kasan` support when building the kernel", action="store_true")
     parser_build.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)
     parser_build.add_argument("-c", "--commands-hook", help="Series of commands to execute in the kernel directory before compiling", type=str)
+    parser_build.add_argument("--config-only", help="Launch the `khelper` command just to create the kernel config", action="store_true")
     parser_build.set_defaults(func=build_k)
 
     parser_clean = subparsers.add_parser(
@@ -351,7 +354,7 @@ def main() -> None:
     )
     parser_initramfs.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
     parser_initramfs.add_argument("-i", "--include", help="List of comma-separated files to include in the initramfs", type=list_str)
-    parser_initramfs.add_argument("-d", "--busybox-dir", help="Use a different busybox source instead of the one specified in the khelper configuration file", type=list_str)
+    parser_initramfs.add_argument("-d", "--busybox-dir", help="Use a different busybox source instead of the one specified in the khelper configuration file", type=Path)
     parser_initramfs.set_defaults(func=build_fs)
 
     parser_run = subparsers.add_parser(

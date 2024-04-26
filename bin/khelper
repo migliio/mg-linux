@@ -126,7 +126,8 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
 def build_k_i386(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = [
         "/usr/bin/make CC=clang i386_defconfig",
-        "/usr/bin/make CC=clang -j`nproc` all"
+        "/usr/bin/make CC=clang -j`nproc` all",
+        "/usr/bin/make CC=clang ARCH=x86 cscope",
     ]
     print(f"[INFO] Building the kernel located at {khelper_config.kernel_dir} with i386 config")
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)

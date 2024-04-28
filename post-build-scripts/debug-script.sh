@@ -8,3 +8,5 @@ mkdir -p $TARGETDIR/root/.ssh
 rm -f $TARGETDIR/root/.ssh/authorized_keys
 cat ~/.ssh/id_ed25519.pub >> $TARGETDIR/root/.ssh/authorized_keys
 echo "hostshare /home/claudio/assets/mg-assets/kernel 9p trans=virtio,version=9p2000.L 0 0" >> $TARGETDIR/etc/fstab
+echo "auto eth0" > $TARGETDIR/etc/network/interfaces
+echo "iface eth0 inet dhcp" >> $TARGETDIR/etc/network/interfaces

@@ -11,6 +11,6 @@ qemu-system-x86_64 -s \
 		   -fsdev local,security_model=passthrough,id=fsdev0,path=$3 \
 		   -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hostshare \
 		   -append "rootwait root=/dev/vda console=ttyS0 nokaslr" \
-		   -net user,hostfwd=tcp::10022-:22 \
+		   -net user,hostfwd=tcp::2222-:22 \
 		   -net nic,model=virtio \
 		   -nographic \

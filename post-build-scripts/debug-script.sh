@@ -1,7 +1,7 @@
 #!/bin/sh
 TARGETDIR=$1
 
-mkdir -p $TARGETDIR/sys/kernel/debug/ 
+mkdir -p $TARGETDIR/sys/kernel/debug/
 echo "debugfs /sys/kernel/debug/ debugfs defaults 0 0" >> $TARGETDIR/etc/fstab
 mkdir -p $TARGETDIR/home/claudio/assets/mg-assets/kernel
 mkdir -p $TARGETDIR/root/.ssh

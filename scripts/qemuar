@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+if [ "$#" -ne 3 ]; then
+    echo "usage: ./qemubr <kernel-src> <arch-image-name> <shared-folder>"
+    exit 1
+fi
+
+KERNEL_SRC=$1
+IMAGE=$2
+SHARED_FOLDER=$3
+
+qemu-system-x86_64 \
+    -s \
+    -m 2G \
+    -smp 1 \
+    -kernel $KERNEL_SRC/arch/x86/boot/bzImage \
+    -fsdev local,security_model=passthrough,id=fsdev0,path=$SHARED_FOLDER \
+    -fsdev local,security_model=passthrough,id=fsdev1,path=$KERNEL_SRC \
+    -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hostshare \
+    -device virtio-9p-pci,id=fs1,fsdev=fsdev1,mount_tag=kernshare \
+    -append "console=ttyS0 nokaslr root=/dev/sda" \
+    -hda $IMAGE \
+    -net user,host=10.0.2.10,hostfwd=tcp:127.0.0.1:10021-:22 \
+    -net nic,model=e1000 \
+    -enable-kvm \
+    -nographic \

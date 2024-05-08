@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -e
+
+KERNEL_VERSION="${KERNEL_VERSION:-$(uname -r)}"
+kernel_version="$(echo "${KERNEL_VERSION}" | awk -vFS=- '{ print $1 }')"
+last_nr="$(echo "${kernel_version}" | awk -vFS=. '{ print $3 }')"
+major_version="$(echo "${KERNEL_VERSION}" | awk -vFS=. '{ print $1 }')"
+
+if [ $last_nr = 0 ]; then
+    kernel_version="$(echo "${kernel_version}" | awk -vFS=. '{ print $1 "." $2}')"
+fi
+
+if [ ! -f /tmp/linux-config ]; then
+    echo "[ERROR] Place a .config file in /tmp/linux-config!"
+    exit -1
+fi
+
+mkdir -p /usr/src/linux
+cd /tmp/
+wget https://www.kernel.org/pub/linux/kernel/v${major_version}.x/linux-$kernel_version.tar.gz
+tar -xvf linux-$kernel_version.tar.gz
+rm linux-$kernel_version.tar.gz
+mv linux-$kernel_version linux
+mv linux /usr/src
+cd /usr/src/linux
+cp /tmp/linux-config /usr/src/linux/.config
+make ARCH=x86_64 oldconfig
+make ARCH=x86_64 prepare
+mkdir -p /lib/modules/$(uname -r)
+ln -sf /usr/src/linux /lib/modules/$(uname -r)/source
+ln -sf /usr/src/linux /lib/modules/$(uname -r)/build

@@ -84,6 +84,7 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         commands.append(args.commands_hook)
     config_commands = [
         "/usr/bin/make CC=clang defconfig",
+        "/usr/bin/make CC=clang kvm_guest.config",
     ]
     for cmd in config_commands:
         commands.append(cmd)
@@ -92,33 +93,73 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
         "./scripts/config --set-val CONFIG_DEBUG_KERNEL y",
         "./scripts/config --set-val CONFIG_CC_OPTIMIZE_FOR_DEBUGGING y",
         "./scripts/config --set-val CONFIG_GDB_SCRIPTS y",
-        "./scripts/config --set-val CONFIG_KCOV y",        
         "./scripts/config --set-val CONFIG_DEBUG_INFO_REDUCED n",
+        "./scripts/config --set-val DEBUG_INFO_DWARF4 y",
         "./scripts/config --set-val CONFIG_FRAME_POINTER y",
-        "./scripts/config --set-val CONFIG_DEBUG_INFO_DWARF4 y",
-        "./scripts/config --set-val CONFIG_CONFIGFS_FS y",
-        "./scripts/config --set-val CONFIG_SECURITYFS y",
         "./scripts/config --set-val CONFIG_CMDLINE_BOOL y",
         "./scripts/config --set-val CONFIG_RANDOMIZE_BASE n",
-        "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",
         "./scripts/config --set-val CONFIG_CHECKPOINT_RESTORE y",
-        "/usr/bin/make CC=clang olddefconfig",
-        "/usr/bin/make CC=clang scripts_gdb",        
+        "./scripts/config --set-val CONFIG_DEBUG_INFO_NONE n",
     ]
     for cmd in custom_config_commands:
-        commands.append(cmd) 
-    if args.kasan_enable:
-        kasan_config_commands = [
+        commands.append(cmd)
+    if args.syzkaller_enable:
+        syzkaller_config_commands = [
+            "./scripts/config --set-val CONFIG_KCOV y",
+            "./scripts/config --set-val CONFIG_DEBUG_INFO_DWARF4 y",
+            "./scripts/config --set-val CONFIG_CONFIGFS_FS y",
+            "./scripts/config --set-val CONFIG_SECURITYFS y",
             "./scripts/config --set-val CONFIG_KASAN y",
             "./scripts/config --set-val CONFIG_KASAN_INLINE y",
+            "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",            
         ]
-        for cmd in kasan_config_commands:
+        for cmd in syzkaller_config_commands:
+            commands.append(cmd)
+    if args.utils_enable:        
+        utils_commands = [
+            "./scripts/config --set-val CONFIG_NET_9P y",
+            "./scripts/config --set-val CONFIG_NET_9P_DEBUG y",
+            "./scripts/config --set-val CONFIG_9P_FS y",
+            "./scripts/config --set-val CONFIG_9P_FS_POSIX_ACL y",
+            "./scripts/config --set-val CONFIG_9P_FS_SECURITY y",
+            "./scripts/config --set-val CONFIG_NET_9P_VIRTIO y",
+            "./scripts/config --set-val CONFIG_VIRTIO_BLK_SCSI y",
+            "./scripts/config --set-val CONFIG_HW_RANDOM_VIRTIO y",
+            "./scripts/config --set-val CONFIG_VIRTIO_PCI_LEGACY y",
+            "./scripts/config --set-val CONFIG_CRYPTO_DEV_VIRTIO y",
+            "./scripts/config --set-val CONFIG_BALLOON_COMPACTION y",
+            "./scripts/config --set-val CONFIG_PCI_HOST_GENERIC y",
+        ]
+        for cmd in utils_commands:
+            commands.append(cmd)
+    if args.ebpf_enable:
+        ebpf_config_commands = [
+            "./scripts/config --set-val CONFIG_BPF y",
+            "./scripts/config --set-val CONFIG_BPF_SYSCALL y",
+            "./scripts/config --set-val CONFIG_BPF_JIT y",
+            "./scripts/config --set-val CONFIG_HAVE_EBPF_JIT y",
+            "./scripts/config --set-val CONFIG_BPF_EVENTS y",
+            "./scripts/config --set-val CONFIG_FTRACE_SYSCALLS y",
+            "./scripts/config --set-val CONFIG_FUNCTION_TRACER y",
+            "./scripts/config --set-val CONFIG_HAVE_DYNAMIC_FTRACE y",
+            "./scripts/config --set-val CONFIG_DYNAMIC_FTRACE y",
+            "./scripts/config --set-val CONFIG_HAVE_KPROBES y",
+            "./scripts/config --set-val CONFIG_KPROBES y",
+            "./scripts/config --set-val CONFIG_KPROBE_EVENTS y",
+            "./scripts/config --set-val CONFIG_ARCH_SUPPORTS_UPROBES y",
+            "./scripts/config --set-val CONFIG_UPROBES y",
+            "./scripts/config --set-val CONFIG_UPROBE_EVENTS y",
+            "./scripts/config --set-val CONFIG_DEBUG_FS y",
+        ]
+        for cmd in ebpf_config_commands:
             commands.append(cmd)
     if args.config_only:
         run_subprocess_in_dir(commands, khelper_config.kernel_dir)
         return
     compile_commands = [
-        "/usr/bin/make WERROR=0 CC=clang -j`nproc` all"
+        "/usr/bin/make CC=clang olddefconfig",
+        "/usr/bin/make CC=clang scripts_gdb",
+        "/usr/bin/make WERROR=0 CC=clang -j`nproc` all",
     ]
     for cmd in compile_commands:
         commands.append(cmd)
@@ -333,7 +374,9 @@ def main() -> None:
     )
     parser_build.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
     parser_build.add_argument("-lsp", "--lsp-enable", help="Enable LSP support when building the kernel", action="store_true")
-    parser_build.add_argument("-kasan", "--kasan-enable", help="Enable `kasan` support when building the kernel", action="store_true")
+    parser_build.add_argument("-syzkaller", "--syzkaller-enable", help="Enable `syzkaller` support when building the kernel", action="store_true")
+    parser_build.add_argument("-ebpf", "--ebpf-enable", help="Enable `eBPF` support when building the kernel", action="store_true")
+    parser_build.add_argument("-utils", "--utils-enable", help="Enable support for some utility functionalities such as `virtio` when building the kernel", action="store_true")
     parser_build.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)
     parser_build.add_argument("-c", "--commands-hook", help="Series of commands to execute in the kernel directory before compiling", type=str)
     parser_build.add_argument("--config-only", help="Launch the `khelper` command just to create the kernel config", action="store_true")

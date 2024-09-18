@@ -495,16 +495,6 @@ def main() -> None:
     parser_qemu_run.add_argument("-d","--filesystem-share", help="The directory to share with QEMU using `virtio`")
     parser_qemu_run.set_defaults(func=qemu_run)
 
-    parser_bootstrap = subparsers.add_parser(
-        "bootstrap",
-        help="Create a minimal distribution image with Arch Linux to run in QEMU",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser_bootstrap.add_argument("image", help="The path of the output raw image", type=Path)
-    parser_bootstrap.add_argument("-s", "--size", help="The size the image will have", default="20G", type=str)
-    parser_bootstrap.add_argument("-i", "--packages-include", help="List of comma-separated packages to include in the minimal distro image", type=list_str)
-    parser_bootstrap.set_defaults(func=bootstrap_run)
-
     if len(sys.argv) == 1:
         parser.print_help()
         parser.exit()

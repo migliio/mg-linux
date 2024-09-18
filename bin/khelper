@@ -495,14 +495,15 @@ def main() -> None:
     parser_qemu_run.add_argument("-d","--filesystem-share", help="The directory to share with QEMU using `virtio`")
     parser_qemu_run.set_defaults(func=qemu_run)
 
-    parser_ctf = subparsers.add_parser(
-        "ctf",
-        help="[TODO] Create a convenient environment for a CTF challenge",
+    parser_bootstrap = subparsers.add_parser(
+        "bootstrap",
+        help="Create a minimal distribution image with Arch Linux to run in QEMU",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_ctf.add_argument("bzImage", help="The bzImage provided by the challenge to extract some symbols through kallsyms", type=Path)
-    parser_ctf.add_argument("initramfs", help="The compressed initramfs provided by the challenge to extract and uncompressed one", type=Path)
-    parser_ctf.add_argument("output", help="The output directory where to put all the artifacts extracted and ready to be used in the CTF", default=Path("/tmp/ctf"))
+    parser_bootstrap.add_argument("image", help="The path of the output raw image", type=Path)
+    parser_bootstrap.add_argument("-s", "--size", help="The size the image will have", default="20G", type=str)
+    parser_bootstrap.add_argument("-i", "--packages-include", help="List of comma-separated packages to include in the minimal distro image", type=list_str)
+    parser_bootstrap.set_defaults(func=bootstrap_run)
 
     if len(sys.argv) == 1:
         parser.print_help()

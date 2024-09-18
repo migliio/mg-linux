@@ -80,6 +80,7 @@ def enable_lsp_support(khelper_config: KhelperConfig) -> None:
 
 
 def craft_config(args: argparse.Namespace) -> list:
+    commands = []
     config_commands = [
         "/usr/bin/make CC=clang defconfig",
         "/usr/bin/make CC=clang kvm_guest.config",
@@ -152,7 +153,7 @@ def craft_config(args: argparse.Namespace) -> list:
         ]
         for cmd in ebpf_config_commands:
             commands.append(cmd)
-        return commands
+    return commands
 
 
 def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:

@@ -99,18 +99,24 @@ def craft_config(args: argparse.Namespace) -> list:
         "./scripts/config --set-val CONFIG_RANDOMIZE_BASE n",
         "./scripts/config --set-val CONFIG_CHECKPOINT_RESTORE y",
         "./scripts/config --set-val CONFIG_DEBUG_INFO_NONE n",
-        "./scripts/config --set-val CONFIG_MEMCG y"
+        "./scripts/config --set-val CONFIG_MEMCG y",
+        "./scripts/config --set-val CONFIG_IKCONFIG y"
     ]
     for cmd in custom_config_commands:
         commands.append(cmd)
+    if args.kasan_enable or args.syzkaller_enable:
+        kasan_config_commands = [
+        "./scripts/config --set-val CONFIG_KASAN y",
+        "./scripts/config --set-val CONFIG_KASAN_INLINE y",
+        ]
+        for cmd in kasan_config_commands:
+            commands.append(cmd)
     if args.syzkaller_enable:
         syzkaller_config_commands = [
             "./scripts/config --set-val CONFIG_KCOV y",
             "./scripts/config --set-val CONFIG_DEBUG_INFO_DWARF4 y",
             "./scripts/config --set-val CONFIG_CONFIGFS_FS y",
             "./scripts/config --set-val CONFIG_SECURITYFS y",
-            "./scripts/config --set-val CONFIG_KASAN y",
-            "./scripts/config --set-val CONFIG_KASAN_INLINE y",
             "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",
         ]
         for cmd in syzkaller_config_commands:
@@ -401,6 +407,7 @@ def main() -> None:
     parser_build.add_argument("arch", help="Target architecture for which we want to build the kernel", choices=["x86-64", "x86"], type=str, default="x86-64")
     parser_build.add_argument("-lsp", "--lsp-enable", help="Enable LSP support when building the kernel", action="store_true")
     parser_build.add_argument("-syzkaller", "--syzkaller-enable", help="Enable `syzkaller` support when building the kernel", action="store_true")
+    parser_build.add_argument("-kasan", "--kasan-enable", help="Enable KASAN support when building the kernel", action="store_true")
     parser_build.add_argument("-ebpf", "--ebpf-enable", help="Enable `eBPF` support when building the kernel", action="store_true")
     parser_build.add_argument("-utils", "--utils-enable", help="Enable support for some utility functionalities such as `virtio` when building the kernel", action="store_true")
     parser_build.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)

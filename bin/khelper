@@ -23,7 +23,7 @@ class KhelperConfig:
         self.vm_dir = vm_dir
 
 # General utility functions
-        
+
 def list_str(values: list):
     return values.split(',')
 
@@ -50,7 +50,7 @@ def run_subprocess_in_dir(commands: list, working_dir: Path) -> None:
             exit(1)
 
 # Configuration file related utility functions
-    
+
 def get_khelper_config() -> KhelperConfig:
     config = configparser.ConfigParser()
     if not __global_config_file.exists():
@@ -68,7 +68,7 @@ def get_khelper_config() -> KhelperConfig:
             busybox_dir=config['Paths']['busyboxdir'],
             vm_dir=config['Paths']['vmdir']
         )
-    
+
 # Kernel related utility functions
 
 def enable_lsp_support(khelper_config: KhelperConfig) -> None:
@@ -77,14 +77,14 @@ def enable_lsp_support(khelper_config: KhelperConfig) -> None:
     ]
     print(f"[INFO] Enabling LSP support in the kernel directory {khelper_config.kernel_dir}")
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
-            
+
 def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     commands = []
     if args.commands_hook != None:
         commands.append(args.commands_hook)
     config_commands = [
-        "/usr/bin/make CC=clang defconfig",
-        "/usr/bin/make CC=clang kvm_guest.config",
+        "/usr/bin/make CC=clang " + args.compilation_flags + " defconfig",
+        "/usr/bin/make CC=clang " + args.compilation_flags + " kvm_guest.config",
     ]
     for cmd in config_commands:
         commands.append(cmd)
@@ -111,11 +111,11 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
             "./scripts/config --set-val CONFIG_SECURITYFS y",
             "./scripts/config --set-val CONFIG_KASAN y",
             "./scripts/config --set-val CONFIG_KASAN_INLINE y",
-            "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",            
+            "./scripts/config --set-val CONFIG_CMDLINE \"net.ifnames=0\"",
         ]
         for cmd in syzkaller_config_commands:
             commands.append(cmd)
-    if args.utils_enable:        
+    if args.utils_enable:
         utils_commands = [
             "./scripts/config --set-val CONFIG_NET_9P y",
             "./scripts/config --set-val CONFIG_NET_9P_DEBUG y",
@@ -156,10 +156,12 @@ def build_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> None
     if args.config_only:
         run_subprocess_in_dir(commands, khelper_config.kernel_dir)
         return
+    if args.compilation_flags == None:
+        args.compilation_flags = ""
     compile_commands = [
-        "/usr/bin/make CC=clang olddefconfig",
-        "/usr/bin/make CC=clang scripts_gdb",
-        "/usr/bin/make WERROR=0 CC=clang -j`nproc` all",
+        "/usr/bin/make CC=clang " + args.compilation_flags + " olddefconfig",
+        "/usr/bin/make CC=clang " + args.compilation_flags + " scripts_gdb",
+        "/usr/bin/make WERROR=0 CC=clang -j`nproc` " + args.compilation_flags + "  all",
     ]
     for cmd in compile_commands:
         commands.append(cmd)
@@ -222,7 +224,7 @@ def build_fs_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> Non
                 commands.append("/usr/bin/cp " + str(curr) + " .")
     commands.append("/usr/bin/find . -print0 | cpio --null -ov --format=newc | gzip -9 > /tmp/staging/initramfs-busybox-x86.cpio.gz")
     run_subprocess_in_dir(commands, Path("/tmp/staging/initramfs/fs"))
-    
+
 def build_fs(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     if args.busybox_dir != None:
         khelper_config.busybox_dir = args.busybox_dir
@@ -245,12 +247,12 @@ def launch_k_x64(args: argparse.Namespace, khelper_config: KhelperConfig) -> Non
     else:
         commands = [
             "qemu-system-x86_64 -cpu qemu64,+smep,+smap -smp 2 -m 512 -kernel " + str(args.kernel_image) + " -initrd " + str(args.file_system) + " -append \"console=ttyS0 init=/init\" -k en-us -nographic"
-        ]        
+        ]
     run_subprocess_in_dir(commands, khelper_config.kernel_dir)
-    
+
 def launch_k_i386(khelper_config: KhelperConfig, with_lsp: bool) -> None:
     return 0
-            
+
 def launch_k(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     match args.arch:
         case 'x86':
@@ -259,7 +261,7 @@ def launch_k(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
             launch_k_x64(args, khelper_config)
         case _:
             assert False, "Unreachable code; are you messing up with the memory?"
-            
+
 def gdb_run(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
     if args.kernel_image == None:
         commands = [
@@ -343,7 +345,7 @@ def qemu_run(args: argparse.Namespace, khelper_config: KhelperConfig) -> None:
             ",if=virtio,format=raw" +
             " -append \"rootwait root=/dev/vda console=tty1 console=ttyS0 nokaslr\"" +
             " -net nic,model=virtio -net user -serial stdio"
-        ]        
+        ]
     else:
         commands = [
             "qemu-system-x86_64 -s -M pc -kernel " +
@@ -389,6 +391,7 @@ def main() -> None:
     parser_build.add_argument("-ebpf", "--ebpf-enable", help="Enable `eBPF` support when building the kernel", action="store_true")
     parser_build.add_argument("-utils", "--utils-enable", help="Enable support for some utility functionalities such as `virtio` when building the kernel", action="store_true")
     parser_build.add_argument("-d", "--kernel-dir", help="Use a different kernel source directory instead of the one specified in the khelper config file", type=Path)
+    parser_build.add_argument("-f", "--compilation-flags", help="Add some compilations flags to the standard compilation process", type=str)
     parser_build.add_argument("-c", "--commands-hook", help="Series of commands to execute in the kernel directory before compiling", type=str)
     parser_build.add_argument("--config-only", help="Launch the `khelper` command just to create the kernel config", action="store_true")
     parser_build.set_defaults(func=build_k)
